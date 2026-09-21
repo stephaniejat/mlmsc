@@ -15,28 +15,30 @@ This folder is separated into the implementations of the numerous diagnostic axe
 - `diagnostics/` is structured to reflect the scoring hierarchy discussed in §5.1: per-mode level verification metrics live in `eigenpair.py`; candidate-representation level criteria are grouped in `representation.py`; the specific diagnostics they contain are detailed at the top of each file.
 - `scoring/` consists of 
     -`spectral_analysis.py`, which aggregates spectral metrics from Kostic et al. 2023, and separately the long-horizon and encoder-inspired criteria which were adapted for spectral analysis;
-    - `composite.py`, which is the central guarded composite scoring function.
+    - `composite.py`, which is the central guarded composite scoring function; the weight sensitivity test referred to in §3.2.4 is also included here.
 
 ### Experimental pipelines (`experiments/`)
 This folder consists of the self-contained notebooks which run the kernel-learning sweep for each kernel family (and encoders). 
 
-Each notebook is sectioned by dynamical system type, and has an experiment for each relevant system tested. Data is generated per-experiment from `kooplearn.datasets`, and uses `kooplearn` for estimator fitting and spectral decomposition. Where the generator/system could not be found natively in `kooplearn`, it has been built from scratch inline. 
+Each notebook opens with a repeat of the metric pipeline and scoring function from `benchmarks/`, and any kernel helpers needed for the rest of the notebook. This is followed by the experiments, which is sectioned by dynamical system type (first the reversible baselines, then non-normal, then analytic controls), and has an experiment for each relevant system tested. For each DS, data is first generated from `kooplearn.datasets`, then calls functions from `kooplearn` for estimator fitting and spectral decomposition. Where the generator/system could not be found natively in `kooplearn`, it has been built from scratch inline. 
 
 The spectral diagnostics and scoring found in `benchmarks/` are also repeated inline for each notebook, so that they can run against `kooplearn` alone. 
 
 - The 4 notebooks experimenting on OU, Langevin, Duffing, Logistic map, Langevin + rotational skew, analytic linear system, and harmonic oscillator are 
     - `kernel_analysis_rbf.ipynb`, 
     - `kernel_analysis_poly.ipynb`, 
-    - `kernel_analysis_hermite.ipynb`, 
-    - `kernel_analysis_linear.ipynb`. 
+    - `kernel_analysis_linear.ipynb`,
+    - `kernel_analysis_hermite.ipynb`.
 
-    They cover the RBF, polynomial, Hermite, and linear kernel families. RBF, polynomial, and linear kernels are native to `kooplearn`, the Hermite kernel and its parametric variations are defined as in Kostic et al. (2023), and built inline from scratch.
+    They cover the RBF, polynomial, linear, and Hermite kernel families. The first three are native kernel options in `kooplearn`; the Hermite kernel was built for this study and callable within the `kooplearn` setup, following the definition and parametric variations (goog/bad/ugly) given in Kostic et al. 2023.
 
-- The graph random-walk systems demonstrate the over-smoothing failure domain in `kernel_analysis_graphs.ipynb`, with the three graph-based kernels implemented for this experiment: delta, diffusion, and resolvent-walk. 
+- The graph random-walk systems demonstrate the over-smoothing failure domain in `kernel_analysis_graphs.ipynb`, with the three graph-based kernels implemented for this experiment: delta, diffusion, and resolvent-walk. More details can be found in §2.5.5.
 
-- `kernel_analysis_ssl.ipynb` contains the learned-encoder self-supervised experiments with `SpectralContrastiveLearning` and the $P_*$-VAMP criterion.
+- `kernel_analysis_ssl.ipynb` contains the learned-encoder self-supervised experiments with `SpectralContrastiveLearning` and the $P_*$-VAMP criterion, making clear how the project bridged encoder feature-learning to kernel representations.
 
 - `joint_hyperparam_selection.ipynb`details the joint ($\gamma, \alpha$) tuning validation reported in §4.3.6.
+
+**N.B. No free-standing plotting cells/code is included in this submission, since it does not bear on the results themselves and clutters up the notebooks. The decision was made to keep the notebooks and files streamlined and easier to assess by leaving them out.**
 
 ### Execution instructions
 #### 1. Create an environment with Python 3.10+, and install the dependencies:

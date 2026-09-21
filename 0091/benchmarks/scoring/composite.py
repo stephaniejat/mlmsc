@@ -421,67 +421,128 @@ def run_weight_sensitivity(
     trials_df,
     *,
     base_weights=None,
-    vary_metrics=("agg_spurious_mean", "mean_spurious_residual_count"),
+    mode="scale",  # "scale": each weighted axis x `scales`; "drop": leave-one-out (weight -> 0)
     scales=(0.8, 1.0, 1.2),
+    truth_col="true_eig_err",  # if present in `summary`, selection quality is scored against it
     selected_modes=(1, 2, 3),
     mode_weights=None,
     normalise="zscore",
     group_cols=("kernel", "kind", "method"),
-    pool_cols=None,
+    pool_cols=None,  # thesis FAM pool: ("family", "system", "kind_n", "method")
     hard_constraints=_DEFAULT,
     extra_metrics=None,
-    top_k=5,
 ):
+    """Sensitivity of the composite selection to the 7 WEIGHTED-axis weights
+    only. Gates are thresholds, not weights, and are excluded from the sweep.
+
+    Only keys with a non-zero `base_weights` entry are perturbed, so the gate
+    metrics are excluded automatically.
+
+    Function responsible for both reported weight ablations in §3.2.4:
+    mode="scale"  perturbs each weighted axis in turn by every factor in `scales`
+                  (baseline robustness, e.g. +/-20%).
+    mode="drop"   sets each weighted axis to zero in turn (leave-one-out ablation:
+                  does the axis earn its place?).
+
+    Note on call-time: this function is best called with a truth-merged table.
+    When `truth_col` is a column of `summary`, each configuration is scored per
+    pool and reported as median within-pool Spearman and top-1-within-10% against
+    it; `pools_moved` counts pools whose selected candidate differs from baseline.
+    """
+    from scipy.stats import spearmanr
+
     if base_weights is None:
         base_weights = dict(GRAND_WEIGHTS)
+    if pool_cols is None:
+        pool_cols = [c for c in group_cols if c != "kernel"]
+    pool_cols = list(pool_cols)
+    axes = [m for m, w in base_weights.items() if w]  # weighted axes only
 
-    rows, top_rows = [], []
-    for metric in vary_metrics:
-        for scale in scales:
-            w = dict(base_weights)
-            w[metric] = base_weights.get(metric, 0.0) * scale
-            _, scores = composite_score(
-                summary,
-                trials_df=trials_df,
-                group_cols=group_cols,
-                pool_cols=pool_cols,
-                selected_modes=list(selected_modes),
-                mode_weights=mode_weights,
-                normalise=normalise,
-                metric_weights=w,
-                hard_constraints=hard_constraints,
-                extra_metrics=extra_metrics,
-            )
-            # global order so "best" is unambiguous regardless of pooling
-            scores_sorted = scores.sort_values(
-                ["admissible", "rank_overall"], ascending=[False, True]
-            ).reset_index(drop=True)
-            top = scores_sorted.head(top_k).copy()
-            best_row = top.iloc[0]
-            rows.append(
-                {
-                    "varied_metric": metric,
-                    "scale": scale,
-                    "best_kernel": best_row.get("kernel"),
-                    "best_kind": best_row.get("kind"),
-                    "best_method": best_row.get("method"),
-                    "best_score": best_row["composite_score"],
-                    "best_rank": best_row["rank"],
-                    "best_admissible": best_row["admissible"],
-                    "top5_signature": " | ".join(
-                        f"{r.get('kernel')} / {r.get('method')} (r{int(r['rank_overall'])})"
-                        for _, r in top.iterrows()
-                    ),
-                }
-            )
-            top["varied_metric"] = metric
-            top["scale"] = scale
-            top_rows.append(top)
+    def _score(weights):
+        _, scores = composite_score(
+            summary,
+            trials_df=trials_df,
+            group_cols=group_cols,
+            pool_cols=pool_cols,
+            selected_modes=list(selected_modes),
+            mode_weights=mode_weights,
+            normalise=normalise,
+            metric_weights=weights,
+            hard_constraints=hard_constraints,
+            extra_metrics=extra_metrics,
+        )
+        return scores
 
-    summary_df = (
-        pd.DataFrame(rows)
-        .sort_values(["varied_metric", "scale"])
-        .reset_index(drop=True)
-    )
-    top_df = pd.concat(top_rows, ignore_index=True)
-    return summary_df, top_df
+    def _pick(scores):  # per-pool selected candidate
+        adm = scores[scores["admissible"]] if "admissible" in scores else scores
+        adm = adm if len(adm) else scores
+        return {
+            k: g.loc[g["composite_score"].idxmin()].name
+            for k, g in adm.groupby(pool_cols)
+        }
+
+    def _quality(scores):
+        if truth_col not in scores.columns:
+            return (np.nan, np.nan, 0)
+        S, T = [], []
+        for _, g in scores.groupby(pool_cols):
+            g = g.dropna(subset=["composite_score", truth_col])
+            if len(g) < 3 or g[truth_col].nunique() < 2:
+                continue
+            best = g[truth_col].min()
+            pk = g.loc[g["composite_score"].idxmin()]
+            S.append(spearmanr(g["composite_score"], g[truth_col]).statistic)
+            T.append(
+                1.0
+                if (pk[truth_col] - best < 1e-9)
+                or (best > 0 and (pk[truth_col] - best) / best < 0.10)
+                else 0.0
+            )
+        return (
+            (float(np.median(S)), float(np.mean(T)), len(S))
+            if S
+            else (np.nan, np.nan, 0)
+        )
+
+    base_scores = _score(base_weights)
+    base_pick = _pick(base_scores)
+    b_sp, b_t1, b_n = _quality(base_scores)
+
+    if mode == "scale":
+        configs = [
+            (m, s, {**base_weights, m: base_weights[m] * s})
+            for m in axes
+            for s in scales
+        ]
+    elif mode == "drop":
+        configs = [(m, 0.0, {**base_weights, m: 0.0}) for m in axes]
+    else:
+        raise ValueError("mode must be 'scale' or 'drop'")
+
+    rows = [
+        {
+            "axis": "(baseline)",
+            "scale": 1.0,
+            "median_spearman": b_sp,
+            "top1": b_t1,
+            "n_pools": b_n,
+            "pools_moved": 0,
+        }
+    ]
+    for m, s, w in configs:
+        sc = _score(w)
+        sp, t1, n = _quality(sc)
+        pk = _pick(sc)
+        moved = sum(1 for k in base_pick if pk.get(k) != base_pick[k])
+        rows.append(
+            {
+                "axis": m,
+                "scale": s,
+                "median_spearman": sp,
+                "top1": t1,
+                "n_pools": n,
+                "pools_moved": moved,
+            }
+        )
+
+    return pd.DataFrame(rows)
