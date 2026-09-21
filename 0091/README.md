@@ -1,4 +1,4 @@
-# COMP0091: MSc Project Experiment Code
+# COMP0091: MSc Project Experiment Code | Candidate SFRT0
 ## Reference-free kernel selection for Koopman operator learning | September 2026
 
 This sub-repository contains the **experiment and methodological code** for the MSc thesis _'There is a tide': Kernel effects on spectral learning of dynamical systems_, supervised by Prof. Massimiliano Pontil. 
@@ -10,7 +10,7 @@ This folder contains the python files holding the implemented diagnostics and sc
 
 Each file is an import-only module that is designed to work with, and calls on elements from, the pre-existing `kooplearn` library.
 
-This folder is separated into the implementations of the numerous diagnostic axes ($x_1 to x_7$, see Table A.2 of the thesis), and the proposed scoring function:
+This folder is separated into the implementations of the numerous diagnostic axes ($x_1$ to $x_7$, see Table A.2 of the thesis), and the proposed scoring function:
 
 - `diagnostics/` is structured to reflect the scoring hierarchy discussed in §5.1: per-mode level verification metrics live in `eigenpair.py`; candidate-representation level criteria are grouped in `representation.py`; the specific diagnostics they contain are detailed at the top of each file.
 - `scoring/` consists of 
