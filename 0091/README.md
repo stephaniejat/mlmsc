@@ -1,7 +1,7 @@
 # COMP0091: MSc Project Experiment Code
 ## Reference-free kernel selection for Koopman operator learning | September 2026
 
-This sub-repository contains the **experiment and methodological code** for the MSc thesis _'There is a tide': Kernel effects on spectral learning of reversible and non-reversible dynamical systems_, supervised by Prof. Massimiliano Pontil. 
+This sub-repository contains the **experiment and methodological code** for the MSc thesis _'There is a tide': Kernel effects on spectral learning of dynamical systems_, supervised by Prof. Massimiliano Pontil. 
 
 This includes the pipelines that run the kernel spectral-learning experiments and compute the reference-free diagnostics, as well as the composite scoring. All of the files are designed to be part of an expansion of the MLDS `kooplearn` repository, and is actively being discussed with the authors of `kooplearn` at the time of writing. Therefore, the code in these files should not be considered in isolation, but as part of a larger library. Code used for plotting, table/CSV assembly, and the derived data are not included (please see Chapter 4 & Appendices of the thesis for the relevant results).
 
